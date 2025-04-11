@@ -1,6 +1,5 @@
 library(tuneR)
 library(signal)
-library(TTR)
 library(tools)
 
 bgnoise <- function(audio_file_path,
@@ -133,25 +132,3 @@ bgnoise <- function(audio_file_path,
     POW = POW_df,
   ))
 }
-
-
-# Example usage
-audio_file_path <- "RAUL4247_20240925_001000.wav"
-list <- bgnoise(audio_file_path)
-View(list$BGN)
-list$entropy
-
-audio_file_path_2 <- "LUIZ4223_20240901_060000.wav"
-list_2 <- bgnoise(audio_file_path_2)
-View(list_2$BGN)
-list_2$entropy
-
-audio_file_path_3 <- "Scythelord - Toxic Minds.mp3"
-list_3 <- bgnoise(audio_file_path_3, time_bin = 30, db_threshold = -80, downsample = TRUE, target_samp_rate = 44100)
-
-list_3$entropy
-
-audio_file_path_4 <- "Dmitri Shostakovich - Waltz No. 2.mp3"
-list_4 <- bgnoise(audio_file_path_4, time_bin = 30, db_threshold = -80, downsample = TRUE, target_samp_rate = 44100)
-
-list_4$entropy
