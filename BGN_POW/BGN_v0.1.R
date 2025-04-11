@@ -2,6 +2,8 @@ library(tuneR)
 library(signal)
 library(tools)
 
+# Teste
+
 bgnoise <- function(audio_file_path,
                     time_bin = 60,
                     db_threshold = -90,
