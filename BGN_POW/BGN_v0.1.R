@@ -11,6 +11,9 @@ bgnoise <- function(audiofile,
                     wl = 512,
                     window = signal::hamming(wl),
                     overlap = ceiling(length(window) / 2)) {
+  
+  source("BGN_POW/internal_functions.R")
+  
   # Check the audio extension
   audio <- if (is.character(audiofile)) {
     if (tools::file_ext(audiofile) %in% c("mp3", "wav")) {
@@ -46,11 +49,11 @@ bgnoise <- function(audiofile,
   # Process right channel if stereo
   if (channel == "both") {
     # Process left channel
-    left_results <- process_channel(slot(audio, "left"), "left")
+    left_results <- process_channel(audio@left, time_bins = frame_bin, wl = wl, samp.rate = audio@samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
     
     # Process right channel if stereo
     if (audio@stereo) {
-      right_results <- process_channel(slot(audio, "right"), "right")
+      right_results <- process_channel(channel_data = audio@right, time_bins = frame_bin, wl = wl, samp.rate = audio@samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
       
       # Combine results
       BGN_combined <- cbind(left_results$BGN, right_results$BGN)
@@ -61,7 +64,7 @@ bgnoise <- function(audiofile,
     }
     
   } else if (channel == "mono") {
-    main_results <- process_channel(tuneR::mono(audio)@left, "left")
+    main_results <- process_channel(channel_data = tuneR::mono(audio)@left, time_bins = frame_bin, wl = wl, samp.rate = audio@samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
     BGN_combined <- main_results$BGN
     POW_combined <- main_results$POW
     
@@ -72,7 +75,7 @@ bgnoise <- function(audiofile,
       stop("Provided audio channel is empty!")
     }
     
-    main_results <- process_channel(slot(audio, channel), channel)
+    main_results <- process_channel(channel_data = desired_channel, time_bins = frame_bin, wl = wl, samp.rate = audio@samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
     BGN_combined <- main_results$BGN
     POW_combined <- main_results$POW
   }
