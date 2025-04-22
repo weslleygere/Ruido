@@ -14,6 +14,10 @@ bgnoise <- function(audiofile,
   
   source("BGN_POW/internal_functions.R")
   
+  if(!channel %in% c("left", "right", "both", "mono")) {
+    stop("Please provide a valid channel: 'left', 'right', 'both', or 'mono'.")
+  }
+  
   # Check the audio extension
   audio <- if (is.character(audiofile)) {
     if (tools::file_ext(audiofile) %in% c("mp3", "wav")) {
@@ -37,11 +41,13 @@ bgnoise <- function(audiofile,
     audio <- tuneR::downsample(audio, target_samp_rate)
   }
   
+  samp.rate <- audio@samp.rate
+  
   # Extract the base name of the audio file (without extension)
   # audio_file_name <- tools::file_path_sans_ext(basename(audio_file_path))
   
   # Calculate the duration of the audio file in seconds
-  audio_dur <- length(audio) / audio@samp.rate
+  audio_dur <- length(audio) / samp.rate
   
   # Calculate the number of frames per time bin
   frame_bin <- ceiling(audio_dur / time_bin)
@@ -49,11 +55,11 @@ bgnoise <- function(audiofile,
   # Process right channel if stereo
   if (channel == "both") {
     # Process left channel
-    left_results <- process_channel(audio@left, time_bins = frame_bin, wl = wl, samp.rate = audio@samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
+    left_results <- process_channel(audio@left, ch = "left", time_bins = frame_bin, bin_size = time_bin, wl = wl, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
     
     # Process right channel if stereo
     if (audio@stereo) {
-      right_results <- process_channel(channel_data = audio@right, time_bins = frame_bin, wl = wl, samp.rate = audio@samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
+      right_results <- process_channel(channel_data = audio@right, ch = "right", time_bins = frame_bin, bin_size = time_bin, wl = wl, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
       
       # Combine results
       BGN_combined <- cbind(left_results$BGN, right_results$BGN)
@@ -64,7 +70,7 @@ bgnoise <- function(audiofile,
     }
     
   } else if (channel == "mono") {
-    main_results <- process_channel(channel_data = tuneR::mono(audio)@left, time_bins = frame_bin, wl = wl, samp.rate = audio@samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
+    main_results <- process_channel(channel_data = tuneR::mono(audio)@left, ch = "mono", time_bins = frame_bin,  bin_size = time_bin, wl = wl, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
     BGN_combined <- main_results$BGN
     POW_combined <- main_results$POW
     
@@ -75,7 +81,7 @@ bgnoise <- function(audiofile,
       stop("Provided audio channel is empty!")
     }
     
-    main_results <- process_channel(channel_data = desired_channel, time_bins = frame_bin, wl = wl, samp.rate = audio@samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
+    main_results <- process_channel(channel_data = desired_channel, ch = channel, time_bins = frame_bin, wl = wl,  bin_size = time_bin, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
     BGN_combined <- main_results$BGN
     POW_combined <- main_results$POW
   }
