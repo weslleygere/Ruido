@@ -1,3 +1,5 @@
 \renv
 .Rprofile
 renv.lock
+.Rproj.user
+R_noise_package
