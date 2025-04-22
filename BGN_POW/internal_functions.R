@@ -62,11 +62,8 @@ process_channel <- function(channel_data,
     data.frame(t(x)))))
   
   # Separating BGN and POW in different data frames
-  BGN <- BGN_POW_df[, grepl("BGN", colnames(BGN_POW_df))]
-  POW <- BGN_POW_df[, grepl("POW", colnames(BGN_POW_df))]
-  
-  colnames(BGN) <- paste0(paste0(toupper(ch), "_BGN", seq(time_bins)))
-  colnames(POW) <- paste0(paste0(toupper(ch), "_POW", seq(time_bins)))
+  BGN <- setNames(data.frame(BGN_POW_df[, grepl("BGN", colnames(BGN_POW_df))]), paste0(paste0(toupper(ch), "_BGN", seq(time_bins))))
+  POW <- setNames(data.frame(BGN_POW_df[, grepl("POW", colnames(BGN_POW_df))]), paste0(paste0(toupper(ch), "_POW", seq(time_bins))))
   
   # Return them both again but no as a list
   return(list(BGN = BGN, POW = POW))
