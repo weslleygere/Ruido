@@ -10,7 +10,8 @@ bgnoise <- function(audiofile,
                     target_samp_rate = NULL,
                     wl = 512,
                     window = signal::hamming(wl),
-                    overlap = ceiling(length(window) / 2)) {
+                    overlap = ceiling(length(window) / 2),
+                    histbreaks = "FD") {
   
   source("BGN_POW/internal_functions.R")
   
@@ -55,11 +56,11 @@ bgnoise <- function(audiofile,
   # Process right channel if stereo
   if (channel == "both") {
     # Process left channel
-    left_results <- process_channel(audio@left, ch = "left", time_bins = frame_bin, bin_size = time_bin, wl = wl, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
+    left_results <- process_channel(audio@left, ch = "left", time_bins = frame_bin, bin_size = time_bin, wl = wl, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window, histbreaks = histbreaks)
     
     # Process right channel if stereo
     if (audio@stereo) {
-      right_results <- process_channel(channel_data = audio@right, ch = "right", time_bins = frame_bin, bin_size = time_bin, wl = wl, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
+      right_results <- process_channel(channel_data = audio@right, ch = "right", time_bins = frame_bin, bin_size = time_bin, wl = wl, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window, histbreaks = histbreaks)
       
       # Combine results
       BGN_combined <- cbind(left_results$BGN, right_results$BGN)
@@ -70,7 +71,7 @@ bgnoise <- function(audiofile,
     }
     
   } else if (channel == "mono") {
-    main_results <- process_channel(channel_data = tuneR::mono(audio)@left, ch = "mono", time_bins = frame_bin,  bin_size = time_bin, wl = wl, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
+    main_results <- process_channel(channel_data = tuneR::mono(audio)@left, ch = "mono", time_bins = frame_bin,  bin_size = time_bin, wl = wl, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window, histbreaks = histbreaks)
     BGN_combined <- main_results$BGN
     POW_combined <- main_results$POW
     
@@ -81,7 +82,7 @@ bgnoise <- function(audiofile,
       stop("Provided audio channel is empty!")
     }
     
-    main_results <- process_channel(channel_data = desired_channel, ch = channel, time_bins = frame_bin, wl = wl,  bin_size = time_bin, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window)
+    main_results <- process_channel(channel_data = desired_channel, ch = channel, time_bins = frame_bin, wl = wl,  bin_size = time_bin, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window, histbreaks = histbreaks)
     BGN_combined <- main_results$BGN
     POW_combined <- main_results$POW
   }
