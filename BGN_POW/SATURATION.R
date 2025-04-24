@@ -6,6 +6,7 @@ soundsat <- function(soundpath,
                      window = signal::hamming(wl),
                      overlap = ceiling(length(window) / 2),
                      channel = "left",
+                     db_threshold = -90,
                      powthr = c(5.1, 20, 0.1),
                      bgnthr = c(0.51, 0.99, 0.02),
                      normality = "shapiro.test",
@@ -42,12 +43,14 @@ soundsat <- function(soundpath,
   
   # Creating a data.frame with each possible combination of the thresholds
   # Each row will contain a unique combination of the thresholds
-  threshold_combinations <- expand.grid(powthreshold, bgnthreshold)
-  colnames(threshold_combinations) <- c("powthreshold", "bgnthreshold")
+  threshold_combinations <- setNames(expand.grid(powthreshold, bgnthreshold), c("powthreshold", "bgnthreshold"))
   
   # Creating a vector with the "name" of each combination
   # By "name" I mean a unique character string to each combination containing both of the threshold values
   combinations <- paste(threshold_combinations[, 1], threshold_combinations[, 2], sep = "/")
+  
+  print(paste("Calculating saturation values for", length(soundfiles), "recordings using",
+              length(combinations), "threshold combinations"))
   
   # Creating a object to hold the normality values for the future
   # R is a weird language, so I did this to avoid errors in the future
@@ -87,7 +90,8 @@ soundsat <- function(soundpath,
       target_samp_rate = target_samp_rate,
       window = window,
       overlap = overlap,
-      channel = channel
+      channel = channel,
+      db_threshold = db_threshold
     )
     
     # Getting the quantile values of BGN necessary to calculate the index
