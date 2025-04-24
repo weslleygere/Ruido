@@ -19,7 +19,8 @@ process_channel <- function(channel_data,
                             samp.rate,
                             overlap,
                             db_threshold,
-                            window) {
+                            window,
+                            histbreaks) {
   # Center the audio file around 0
   offset <- channel_data - mean(channel_data)
   
@@ -49,11 +50,16 @@ process_channel <- function(channel_data,
       db_max <- max(x)
       db_min <- min(x)
       
-      histo <- hist(x = x,
-                    plot = FALSE,
-                    breaks = 'FD')  # Freedman-Diaconis rule)
+      bin_width <- 2 * IQR(x) / length(x)^(1 / 3)
       
-      modal_intensity <- histo$mids[which.max(histo$counts)]
+      num_bins <- ifelse(is.numeric(histbreaks),
+                         histbreaks,
+                         eval(parse(text = paste0("nclass.", histbreaks, "(x)"))))
+      
+      modal_intensity <- db_min + ((which.max(tabulate(findInterval(
+        x = x,
+        vec = seq(db_min, db_max, length.out = num_bins)
+      )))) * bin_width)
       
       c(BGN = modal_intensity, POW = db_max - modal_intensity)
     })
