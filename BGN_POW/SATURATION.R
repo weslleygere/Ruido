@@ -52,7 +52,9 @@ soundsat <- function(soundpath,
   # Creating a vector with the "name" of each combination
   # By "name" I mean a unique character string to each combination containing both of the threshold values
   combinations <- paste(threshold_combinations[, 1], threshold_combinations[, 2], sep = "/")
-  
+
+  # Making sure the user understand what he is about to get into.
+  # Might add a timer in the future.
   print(
     paste(
       "Calculating saturation values for",
@@ -66,11 +68,13 @@ soundsat <- function(soundpath,
   # Creating a object to hold the normality values for the future
   # R is a weird language, so I did this to avoid errors in the future
   normal <- c()
-  
-  # Begin the main loop
-  # The loop will repeat to each provided file and will calculate the values of saturation for every threshold combinations
+
+# Function's main part.
+  # First we need to calculate the BGN and POW values for each recoding on the given path, then we are going to create an "activity matrix" to determine the saturation.
   
   SAT_df <- data.frame(t(sapply(soundfiles, function(soundfile) {
+
+    # Getting the recording BGN and POW values
     BGN_POW <- bgnoise(
       soundfile,
       time_bin = time_bin,
@@ -83,15 +87,18 @@ soundsat <- function(soundpath,
       wl = wl,
       histbreaks = histbreaks
     )
-    
+
+    # Getting the quantile of background noise of the current recording to calculate the activity with BGN values
     BGN_Q <- setNames(quantile(unlist(BGN_POW$BGN), probs = seq(bgnthr[1], bgnthr[2], bgnthr[3])),
                       seq(bgnthr[1], bgnthr[2], bgnthr[3]))
-    
+
+    # Checking which values are above the threshold for BGN and POW
     BGN_saturation <- sapply(BGN_Q, function(Q)
       Q < BGN_POW$BGN)
     POW_saturation <- sapply(powthreshold, function(Q)
       Q < BGN_POW$POW)
-    
+
+    # Little message to tell the user the current progress of the function
     cat(
       "\r(",
       basename(soundfile),
@@ -102,11 +109,11 @@ soundsat <- function(soundpath,
       " recordinds concluded!",
       sep = ""
     )
-    
-    mapply(
-      function(bgnthresh, powthresh) {
+
         # This is the part where we calculate the saturation values for each threshold combination
         # The function will return a value between 0 and 1, where 0 means that no frame of the audio file was above the threshold and 1 means that all frames were above the threshold
+    mapply(
+      function(bgnthresh, powthresh) {
         sum(BGN_saturation[, paste(bgnthresh)] |
               POW_saturation[, paste(powthresh)]) /
           nrow(BGN_saturation)
@@ -122,8 +129,9 @@ soundsat <- function(soundpath,
   
   # Now, after we get the saturation values for every single threshold, we are going to the weird part of the function
   # In this index, we must calculate the normality of the data to define which threshold holds the correct information of saturation
-  # We run a homosexuality test (I set shapiro.test as default since it generally yields "nicer" results, although using ks.test may yield more realistic results) to the values of saturation of each threshold and then we grab which threshold holds the more normal results
-  
+  # We run a homosexuality test (I set shapiro.test as default since it generally yields "nicer looking" results, although using ks.test may yield more realistic results) to the values of saturation of each threshold and then we grab which threshold holds the more normal results
+  # This is the quickiest part of the whole function.
+    
   normal <- if (normality == "ks.test") {
     sapply(SAT_df, function(Q)
       ks.test(Q, pnorm)$p.value)
