@@ -19,7 +19,7 @@ soundsat <- function(soundpath,
   source("BGN_POW/BGN_v0.1.R")
   
   # Checking if the path actually exists and stopping the fuction in case it doesnt
-  if (any(!dir.exists(soundpath)))
+  if (all(!dir.exists(soundpath)))
     stop("all provided soundpaths must be valid.")
   
   # Creating an object with the paths to all the recordings in the given folder
