@@ -23,7 +23,7 @@ soundsat <- function(soundpath,
   if (all(!dir.exists(soundpath)))
     stop("all provided soundpaths must be valid.")
   
-  if(!dir.exists(backup))
+  if (!is.null(backup) && !dir.exists(backup))
     stop("you must provide a valid folder for backup.")
   
   # Creating an object with the paths to all the recordings in the given folder
@@ -93,15 +93,42 @@ soundsat <- function(soundpath,
     )
     
     if (is(BGN_POW, "error") || is(BGN_POW, "warning")) {
-      cat("\n", basename(soundfile), "is not valid!\nError:", BGN_POW$message, "\n")
+      cat("\n",
+          basename(soundfile),
+          "is not valid!\nError:",
+          BGN_POW$message,
+          "\n")
     } else {
-      BGN_Q <- setNames(quantile(unlist(BGN_POW$BGN), probs = seq(bgnthr[1], bgnthr[2], bgnthr[3])),
-                        seq(bgnthr[1], bgnthr[2], bgnthr[3]))
-      
-      actv_size <- prod(dim(BGN_POW$BGN))
-      
-      BGN_saturation <- lapply(BGN_Q, function(Q)
-        Q < BGN_POW$BGN)
+      if (channel == "both") {
+        BGN_left <- BGN_POW$BGN[grepl(toupper("left"), colnames(BGN_POW$BGN))]
+        BGN_right <- BGN_POW$BGN[grepl(toupper("right"), colnames(BGN_POW$BGN))]
+        
+        BGN_Q_left <- setNames(quantile(unlist(BGN_left), probs = seq(bgnthr[1], bgnthr[2], bgnthr[3])),
+                               seq(bgnthr[1], bgnthr[2], bgnthr[3]))
+        BGN_Q_right <- setNames(quantile(unlist(BGN_right), probs = seq(bgnthr[1], bgnthr[2], bgnthr[3])),
+                                seq(bgnthr[1], bgnthr[2], bgnthr[3]))
+        
+        BGN_saturation_left <- lapply(BGN_Q_left, function(Q)
+          Q < BGN_left)
+        BGN_saturation_right <- lapply(BGN_Q_right, function(Q)
+          Q < BGN_right)
+        
+        BGN_saturation <- Map(cbind, BGN_saturation_left, BGN_saturation_right)
+        
+        POW_saturation <- lapply(powthreshold, function(Q)
+          Q < BGN_POW$POW)
+        
+      } else {
+        BGN_Q <- setNames(quantile(
+          unlist(BGN_POW$BGN),
+          probs = seq(bgnthr[1], bgnthr[2], bgnthr[3])
+        ),
+        seq(bgnthr[1], bgnthr[2], bgnthr[3]))
+        
+        BGN_saturation <- lapply(BGN_Q, function(Q)
+          Q < BGN_POW$BGN)
+        
+      }
       
       POW_saturation <- lapply(powthreshold, function(Q)
         Q < BGN_POW$POW)
@@ -126,11 +153,19 @@ soundsat <- function(soundpath,
         threshold_combinations$powthreshold
       )
       
-      rownames(sat_ex) <- paste(basename(soundfile), "SAT", 1:nrow(sat_ex), sep = "_")
+      nbins <- nrow(sat_ex)
+      
+      rownames(sat_ex) <- if (channel != "both") {
+        paste(basename(soundfile), "SAT", 1:nbins, channel, sep = "_")
+      } else {
+        paste(basename(soundfile), "SAT", rep(c("left", "right"), each = nbins/2), seq(nbins/2), sep = "_")
+      }
       
       if (!is.null(backup)) {
-        write.table(sat_ex, file = paste0(backup, "/", basename(soundfile), ".txt"), sep = "\t")
-      }
+        write.table(sat_ex,
+                    file = paste0(backup, "/", basename(soundfile), ".txt"),
+                    sep = "\t")
+      } 
       
       return(sat_ex)
     }
