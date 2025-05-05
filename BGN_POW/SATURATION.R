@@ -11,7 +11,8 @@ soundsat <- function(soundpath,
                      powthr = c(5.1, 20, 0.1),
                      bgnthr = c(0.51, 0.99, 0.02),
                      normality = "shapiro.test",
-                     n_files = NULL) {
+                     n_files = NULL,
+                     backup = NULL) {
   # Loading necessary packages
   require(tuneR)
   require(signal)
@@ -22,8 +23,11 @@ soundsat <- function(soundpath,
   if (any(!dir.exists(soundpath)))
     stop("all provided soundpaths must be valid.")
   
+  if(!dir.exists(backup))
+    stop("you must provide a valid folder for backup.")
+  
   # Creating an object with the paths to all the recordings in the given folder
-  soundfiles <- list.files(soundpath, full.names = TRUE, recursive = TRUE)
+  soundfiles <- list.files(soundpath, full.names = TRUE)
   soundfiles <- soundfiles[tools::file_ext(soundfiles) %in% c("mp3", "wav")]
   
   # For debugging purposes, only reads the first n files
@@ -63,60 +67,78 @@ soundsat <- function(soundpath,
     )
   )
   
-  # Creating a object to hold the normality values for the future
-  # R is a weird language, so I did this to avoid errors in the future
-  normal <- c()
+  half_wl <- wl / 2
   
   # Begin the main loop
   # The loop will repeat to each provided file and will calculate the values of saturation for every threshold combinations
   
-  SAT_df <- data.frame(t(sapply(soundfiles, function(soundfile) {
-    BGN_POW <- bgnoise(
-      soundfile,
-      time_bin = time_bin,
-      downsample = downsample,
-      target_samp_rate = target_samp_rate,
-      window = window,
-      overlap = overlap,
-      channel = channel,
-      db_threshold = db_threshold,
-      wl = wl,
-      histbreaks = histbreaks
+  SAT_df <- do.call(rbind, lapply(soundfiles, function(soundfile) {
+    BGN_POW <- tryCatch(
+      bgnoise(
+        soundfile,
+        time_bin = time_bin,
+        downsample = downsample,
+        target_samp_rate = target_samp_rate,
+        window = window,
+        overlap = overlap,
+        channel = channel,
+        db_threshold = db_threshold,
+        wl = wl,
+        histbreaks = histbreaks
+      ),
+      error = function(e)
+        e,
+      warning = function(w)
+        w
     )
     
-    BGN_Q <- setNames(quantile(unlist(BGN_POW$BGN), probs = seq(bgnthr[1], bgnthr[2], bgnthr[3])),
-                      seq(bgnthr[1], bgnthr[2], bgnthr[3]))
+    if (is(BGN_POW, "error") || is(BGN_POW, "warning")) {
+      cat("\n", basename(soundfile), "is not valid!\nError:", BGN_POW$message, "\n")
+    } else {
+      BGN_Q <- setNames(quantile(unlist(BGN_POW$BGN), probs = seq(bgnthr[1], bgnthr[2], bgnthr[3])),
+                        seq(bgnthr[1], bgnthr[2], bgnthr[3]))
+      
+      actv_size <- prod(dim(BGN_POW$BGN))
+      
+      BGN_saturation <- lapply(BGN_Q, function(Q)
+        Q < BGN_POW$BGN)
+      
+      POW_saturation <- lapply(powthreshold, function(Q)
+        Q < BGN_POW$POW)
+      
+      cat(
+        "\r(",
+        basename(soundfile),
+        ") ",
+        match(soundfile, soundfiles),
+        " out of ",
+        length(soundfiles),
+        " recordinds concluded!",
+        sep = ""
+      )
+      
+      sat_ex <- mapply(
+        function(bgnthresh, powthresh) {
+          colSums(BGN_saturation[[paste(bgnthresh)]] |
+                    POW_saturation[[paste(powthresh)]]) / half_wl
+        },
+        threshold_combinations$bgnthreshold,
+        threshold_combinations$powthreshold
+      )
+      
+      rownames(sat_ex) <- paste(basename(soundfile), "SAT", 1:nrow(sat_ex), sep = "_")
+      
+      if (!is.null(backup)) {
+        write.table(sat_ex, file = paste0(backup, "/", basename(soundfile), ".txt"), sep = "\t")
+      }
+      
+      return(sat_ex)
+    }
     
-    BGN_saturation <- sapply(BGN_Q, function(Q)
-      Q < BGN_POW$BGN)
-    POW_saturation <- sapply(powthreshold, function(Q)
-      Q < BGN_POW$POW)
-    
-    cat(
-      "\r(",
-      basename(soundfile),
-      ") ",
-      match(soundfile, soundfiles),
-      " out of ",
-      length(soundfiles),
-      " recordinds concluded!",
-      sep = ""
-    )
-    
-    mapply(
-      function(bgnthresh, powthresh) {
-        # This is the part where we calculate the saturation values for each threshold combination
-        # The function will return a value between 0 and 1, where 0 means that no frame of the audio file was above the threshold and 1 means that all frames were above the threshold
-        sum(BGN_saturation[, paste(bgnthresh)] |
-              POW_saturation[, paste(powthresh)]) /
-          nrow(BGN_saturation)
-        
-      },
-      threshold_combinations$bgnthreshold,
-      threshold_combinations$powthreshold
-    )
-    
-  })))
+  }))
+  
+  if (!is.null(backup))
+    file.remove(paste0(backup, "/", basename(soundfiles), ".txt"))
   
   colnames(SAT_df) <- combinations
   
@@ -125,24 +147,20 @@ soundsat <- function(soundpath,
   # We run a homosexuality test (I set shapiro.test as default since it generally yields "nicer" results, although using ks.test may yield more realistic results) to the values of saturation of each threshold and then we grab which threshold holds the more normal results
   
   normal <- if (normality == "ks.test") {
-    sapply(SAT_df, function(Q)
+    apply(SAT_df, 2, function(Q)
       ks.test(Q, pnorm)$p.value)
     
   } else if (normality == "shapiro.test") {
-    as.numeric(sapply(SAT_df, function(uni)
-      ifelse(length(unique(uni)) != 1, shapiro.test(uni)$p.value, 0)))
+    apply(SAT_df, 2, function(x)
+      ifelse(length(unique(x)) != 1, shapiro.test(x)$p.value, 0))
     
   } else {
-    sapply(SAT_df, function(Q)
+    apply(SAT_df, 2, function(Q)
       eval(parse(text = paste0(
-        normality, "(", Q, ")"
+        normality, "(c(", paste((Q), collapse = ","), "))"
       )))$p.value)
     
   }
-  
-  # After running the normality tests, we name the strings to get which combination yields our results
-  
-  names(normal) <- combinations
   
   # Now we grab the threshold combination that yield the most normal results.
   # For shapiro.test, the higher the number, the higher the normality
@@ -178,7 +196,7 @@ soundsat <- function(soundpath,
   export["powthresh"] <- as.numeric(thresholds[1])
   export["bgntresh"] <- as.numeric(thresholds[2]) * 100
   export[normality] <- as.numeric(as.numeric(max(normal)))
-  export[["values"]] <- data.frame(soundfile = basename(rownames(SAT_df)), SAT = SAT_df[[which.max(normal)]])
+  export[["values"]] <- data.frame(SAT = SAT_df[, which.max(normal)])
   
   return(export)
   
