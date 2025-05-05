@@ -1,7 +1,7 @@
 # Auxiliary function to grab each minute of a recording
 get_sample_bins <- function(samples, samp.rate, time_bins, bin_size) {
-  b = seq(1, samples, samp.rate * bin_size)
-  e = seq(samp.rate * bin_size, samples, samp.rate * bin_size)
+  b <- seq(1, samples, by = samp.rate * bin_size)
+  e <- pmin(b + samp.rate * bin_size - 1, samples)
   
   if (length(b) == length(e)) {
     data.frame(b, e)
@@ -38,6 +38,7 @@ process_channel <- function(channel_data,
   })
   
   BGN_POW_df <- data.frame(do.call(cbind, lapply(lapply(temp_holder, function(single_bin) {
+    
     spect_S <- abs(single_bin$S)
     
     # Convert to decibels
