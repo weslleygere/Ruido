@@ -20,7 +20,7 @@ soundsat <- function(soundpath,
   source("BGN_POW/BGN_v0.1.R")
   
   # Checking if the path actually exists and stopping the fuction in case it doesnt
-  if (any(!dir.exists(soundpath)))
+  if (all(!dir.exists(soundpath)))
     stop("all provided soundpaths must be valid.")
   
   if(!dir.exists(backup))
@@ -56,7 +56,9 @@ soundsat <- function(soundpath,
   # Creating a vector with the "name" of each combination
   # By "name" I mean a unique character string to each combination containing both of the threshold values
   combinations <- paste(threshold_combinations[, 1], threshold_combinations[, 2], sep = "/")
-  
+
+  # Making sure the user understand what he is about to get into.
+  # Might add a timer in the future.
   print(
     paste(
       "Calculating saturation values for",
@@ -67,6 +69,7 @@ soundsat <- function(soundpath,
     )
   )
   
+<<<<<<< HEAD
   half_wl <- wl / 2
   
   # Begin the main loop
@@ -139,13 +142,75 @@ soundsat <- function(soundpath,
   
   if (!is.null(backup))
     file.remove(paste0(backup, "/", basename(soundfiles), ".txt"))
+=======
+  # Creating a object to hold the normality values for the future
+  # R is a weird language, so I did this to avoid errors in the future
+  normal <- c()
+
+# Function's main part.
+  # First we need to calculate the BGN and POW values for each recoding on the given path, then we are going to create an "activity matrix" to determine the saturation.
+  
+  SAT_df <- data.frame(t(sapply(soundfiles, function(soundfile) {
+
+    # Getting the recording BGN and POW values
+    BGN_POW <- bgnoise(
+      soundfile,
+      time_bin = time_bin,
+      downsample = downsample,
+      target_samp_rate = target_samp_rate,
+      window = window,
+      overlap = overlap,
+      channel = channel,
+      db_threshold = db_threshold,
+      wl = wl,
+      histbreaks = histbreaks
+    )
+
+    # Getting the quantile of background noise of the current recording to calculate the activity with BGN values
+    BGN_Q <- setNames(quantile(unlist(BGN_POW$BGN), probs = seq(bgnthr[1], bgnthr[2], bgnthr[3])),
+                      seq(bgnthr[1], bgnthr[2], bgnthr[3]))
+
+    # Checking which values are above the threshold for BGN and POW
+    BGN_saturation <- sapply(BGN_Q, function(Q)
+      Q < BGN_POW$BGN)
+    POW_saturation <- sapply(powthreshold, function(Q)
+      Q < BGN_POW$POW)
+
+    # Little message to tell the user the current progress of the function
+    cat(
+      "\r(",
+      basename(soundfile),
+      ") ",
+      match(soundfile, soundfiles),
+      " out of ",
+      length(soundfiles),
+      " recordinds concluded!",
+      sep = ""
+    )
+
+        # This is the part where we calculate the saturation values for each threshold combination
+        # The function will return a value between 0 and 1, where 0 means that no frame of the audio file was above the threshold and 1 means that all frames were above the threshold
+    mapply(
+      function(bgnthresh, powthresh) {
+        sum(BGN_saturation[, paste(bgnthresh)] |
+              POW_saturation[, paste(powthresh)]) /
+          nrow(BGN_saturation)
+        
+      },
+      threshold_combinations$bgnthreshold,
+      threshold_combinations$powthreshold
+    )
+    
+  })))
+>>>>>>> ca825c18a46fc58cdde165aef452585eb6e33997
   
   colnames(SAT_df) <- combinations
   
   # Now, after we get the saturation values for every single threshold, we are going to the weird part of the function
   # In this index, we must calculate the normality of the data to define which threshold holds the correct information of saturation
-  # We run a homosexuality test (I set shapiro.test as default since it generally yields "nicer" results, although using ks.test may yield more realistic results) to the values of saturation of each threshold and then we grab which threshold holds the more normal results
-  
+  # We run a homosexuality test (I set shapiro.test as default since it generally yields "nicer looking" results, although using ks.test may yield more realistic results) to the values of saturation of each threshold and then we grab which threshold holds the more normal results
+  # This is the quickiest part of the whole function.
+    
   normal <- if (normality == "ks.test") {
     apply(SAT_df, 2, function(Q)
       ks.test(Q, pnorm)$p.value)
