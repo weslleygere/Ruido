@@ -99,6 +99,7 @@ soundsat <- function(soundpath,
           BGN_POW$message,
           "\n")
     } else {
+      
       if (channel == "both") {
         BGN_left <- BGN_POW$BGN[grepl(toupper("left"), colnames(BGN_POW$BGN))]
         BGN_right <- BGN_POW$BGN[grepl(toupper("right"), colnames(BGN_POW$BGN))]
@@ -114,9 +115,6 @@ soundsat <- function(soundpath,
           Q < BGN_right)
         
         BGN_saturation <- Map(cbind, BGN_saturation_left, BGN_saturation_right)
-        
-        POW_saturation <- lapply(powthreshold, function(Q)
-          Q < BGN_POW$POW)
         
       } else {
         BGN_Q <- setNames(quantile(
