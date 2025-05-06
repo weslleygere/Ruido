@@ -27,19 +27,18 @@ process_channel <- function(channel_data,
   all_samples <- get_sample_bins(length(offset), samp.rate, time_bins, bin_size)
   
   temp_holder <- apply(all_samples, 1, function(x) {
-    signal::specgram(
+    list(signal::specgram(
       x = offset[x[1]:x[2]],
       n = wl,
       Fs = samp.rate,
       window = window,
       overlap = overlap
-    )
-    
+    )$S)
   })
   
   BGN_POW_df <- data.frame(do.call(cbind, lapply(lapply(temp_holder, function(single_bin) {
     
-    spect_S <- abs(single_bin$S)
+    spect_S <- abs(single_bin[[1]])
     
     # Convert to decibels
     spect_S <- 10 * log10(spect_S / max(spect_S))
