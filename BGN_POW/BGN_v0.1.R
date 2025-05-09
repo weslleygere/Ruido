@@ -2,28 +2,38 @@ library(tuneR)
 library(signal)
 library(tools)
 
-# Test
-
-bgnoise <- function(audio_file_path,
+bgnoise <- function(audiofile,
+                    channel = "both",
                     time_bin = 60,
                     db_threshold = -90,
                     downsample = FALSE,
                     target_samp_rate = NULL,
                     wl = 512,
-                    window = signal::hanning(wl),
-                    overlap = ceiling(length(window) / 2)) {
+                    window = signal::hamming(wl),
+                    overlap = ceiling(length(window) / 2),
+                    histbreaks = "FD") {
+  
+  source("BGN_POW/internal_functions.R")
+  
+  if(!channel %in% c("left", "right", "both", "mono")) {
+    stop("Please provide a valid channel: 'left', 'right', 'both', or 'mono'.")
+  }
   
   # Check the audio extension
-  if (tools::file_ext(audio_file_path) %in% c("mp3", "wav")) {
-    audio <- if (tools::file_ext(audio_file_path) == "mp3") {
-      tuneR::readMP3(audio_file_path)
+  audio <- if (is.character(audiofile)) {
+    if (tools::file_ext(audiofile) %in% c("mp3", "wav")) {
+      if (tools::file_ext(audiofile) == "mp3") {
+        tuneR::readMP3(audiofile)
+      } else {
+        tuneR::readWave(audiofile)
+      }
     } else {
-      tuneR::readWave(audio_file_path)
+      stop("The audio file must be in MP3 or WAV format.")
     }
   } else {
-    stop("The audio file must be in MP3 or WAV format.")
+    audiofile
   }
-
+  
   # Downsample if requested
   if (downsample) {
     if (is.null(target_samp_rate)) {
@@ -32,105 +42,49 @@ bgnoise <- function(audio_file_path,
     audio <- tuneR::downsample(audio, target_samp_rate)
   }
   
+  samp.rate <- audio@samp.rate
+  
   # Extract the base name of the audio file (without extension)
-  audio_file_name <- tools::file_path_sans_ext(basename(audio_file_path))
+  # audio_file_name <- tools::file_path_sans_ext(basename(audio_file_path))
   
   # Calculate the duration of the audio file in seconds
-  audio_dur <- length(audio) / audio@samp.rate
+  audio_dur <- length(audio) / samp.rate
   
   # Calculate the number of frames per time bin
   frame_bin <- ceiling(audio_dur / time_bin)
   
-  # Auxiliary function to process each channel
-  process_channel <- function(channel_data, channel_name) {
-    # Center the audio file around 0
-    offset <- channel_data - mean(channel_data)
-    
-    # Calculate the spectrogram
-    spect <- signal::specgram(
-      x = offset,
-      n = wl,
-      Fs = audio@samp.rate,
-      window = window,
-      overlap = overlap
-    )
-    
-    # Calculate the frame size
-    frame <- ceiling(length(spect$t) / frame_bin)
-    
-    # Calculate the number of frequency bins
-    freq_bins <- length(spect$f)
-    
-    # Calculate the absolute value of the coefficients (magnitude)
-    spect_S <- abs(spect$S)
-    
-    # Convert to decibels
-    spect_S_log <- 10 * log10(spect_S / max(spect_S))
-
-    # Create matrices for background noise (BGN) and power (POW)
-    BGN <- POW <- matrix(NA, nrow = freq_bins, ncol = frame_bin)
-    
-    colnames(BGN) <- paste0(channel_name, "_", seq_len(frame_bin))
-    colnames(POW) <- paste0(channel_name, "_", seq_len(frame_bin))
-    rownames(BGN) <- rownames(POW) <- paste0("f", seq_len(freq_bins))
-    
-    for (i in 1:frame_bin) {
-      frame_start <- 1 + frame * (i - 1)
-      frame_end <- min(frame_start + frame - 1, length(spect$t))
-      
-      ampdata <- spect_S_log[, frame_start:frame_end]
-      ampdata[ampdata < db_threshold] <- db_threshold
-      
-      for (f in seq_len(nrow(ampdata))) {
-        db_max <- max(ampdata[f, ])
-        db_min <- min(ampdata[f, ])
-        
-        histo <- hist(
-          x = ampdata[f, ],
-          plot = FALSE,
-          breaks = 'FD'  # Freedman-Diaconis rule
-        )
-        
-        modal_intensity <- histo$mids[which.max(histo$counts)]
-        
-        BGN[f, i] <- modal_intensity
-        POW[f, i] <- db_max - modal_intensity
-      }
-    }
-
-    return (list(BGN = BGN, POW = POW))
-  }
-
-  # Process left channel
-  left_channel <- audio@left
-  left_results <- process_channel(left_channel, "left")
-
   # Process right channel if stereo
-  if (audio@stereo) {
-    right_channel <- audio@right
-    right_results <- process_channel(right_channel, "right")
+  if (channel == "both") {
+    # Process left channel
+    left_results <- process_channel(audio@left, ch = "left", time_bins = frame_bin, bin_size = time_bin, wl = wl, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window, histbreaks = histbreaks)
     
-    # Combine matrices
-    BGN_combined <- cbind(left_results$BGN, right_results$BGN)
-    POW_combined <- cbind(left_results$POW, right_results$POW)
+    # Process right channel if stereo
+    if (audio@stereo) {
+      right_results <- process_channel(channel_data = audio@right, ch = "right", time_bins = frame_bin, bin_size = time_bin, wl = wl, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window, histbreaks = histbreaks)
+      
+      # Combine results
+      BGN_combined <- cbind(left_results$BGN, right_results$BGN)
+      POW_combined <- cbind(left_results$POW, right_results$POW)
+    } else {
+      BGN_combined <- left_results$BGN
+      POW_combined <- left_results$POW
+    }
+    
+  } else if (channel == "mono") {
+    main_results <- process_channel(channel_data = tuneR::mono(audio)@left, ch = "mono", time_bins = frame_bin,  bin_size = time_bin, wl = wl, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window, histbreaks = histbreaks)
+    BGN_combined <- main_results$BGN
+    POW_combined <- main_results$POW
     
   } else {
-    BGN_combined <- left_results$BGN
-    POW_combined <- left_results$POW
+    desired_channel <- slot(audio, channel)
     
+    if (length(desired_channel) == 0) {
+      stop("Provided audio channel is empty!")
+    }
+    
+    main_results <- process_channel(channel_data = desired_channel, ch = channel, time_bins = frame_bin, wl = wl,  bin_size = time_bin, samp.rate = samp.rate, overlap = overlap, db_threshold = db_threshold, window = window, histbreaks = histbreaks)
+    BGN_combined <- main_results$BGN
+    POW_combined <- main_results$POW
   }
-
-  # Convert to data frames
-  BGN_df <- as.data.frame(BGN_combined)
-  POW_df <- as.data.frame(POW_combined)
-
-  # Export to CSV
-  write.csv(BGN_df, file = paste0(audio_file_name, "_BGN_results.csv"))
-  write.csv(POW_df, file = paste0(audio_file_name, "_POW_results.csv"))
-
-  # Return results
-  return(list(
-    BGN = BGN_df,
-    POW = POW_df,
-  ))
+  return(list(BGN = as.data.frame(BGN_combined), POW = as.data.frame(POW_combined)))
 }
