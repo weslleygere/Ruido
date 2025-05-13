@@ -3,3 +3,5 @@
 renv.lock
 .Rproj.user
 R_noise_package
+\audio_examples
+\code_examples
