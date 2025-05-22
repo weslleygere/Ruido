@@ -29,6 +29,7 @@ process_channel <- function(channel_data,
   channel_data <- switch(
     channel,
     "stereo" = list("left" = channel_data@left, "right" = channel_data@right),
+    "mono" = list(mono = tuneR::mono(channel_data, "both")@left),
     setNames(list(slot(channel_data, channel)), channel)
   )
   
