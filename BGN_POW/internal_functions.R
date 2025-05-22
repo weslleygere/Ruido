@@ -1,5 +1,5 @@
 # Auxiliary function to grab each minute of a recording
-get_sample_bins <- function(samples, samp.rate, time_bins, bin_size) {
+get_sample_bins <- function(samples, samp.rate, bin_size) {
   b <- seq(1, samples, by = samp.rate * bin_size)
   e <- pmin(b + samp.rate * bin_size - 1, samples)
   
@@ -12,66 +12,86 @@ get_sample_bins <- function(samples, samp.rate, time_bins, bin_size) {
 }
 
 process_channel <- function(channel_data,
-                            time_bins,
-                            ch,
-                            bin_size,
+                            channel,
+                            time_bin,
                             wl,
-                            samp.rate,
                             overlap,
                             db_threshold,
                             window,
                             histbreaks) {
-  # Center the audio file around 0
-  offset <- channel_data - mean(channel_data)
   
-  all_samples <- get_sample_bins(length(offset), samp.rate, time_bins, bin_size)
+  samp.rate <- channel_data@samp.rate
   
-  temp_holder <- apply(all_samples, 1, function(x) {
-    list(signal::specgram(
-      x = offset[x[1]:x[2]],
-      n = wl,
-      Fs = samp.rate,
-      window = window,
-      overlap = overlap
-    )$S)
-  })
+  frame_bin <- ceiling(length(channel_data) / samp.rate) / time_bin
   
-  BGN_POW_df <- data.frame(do.call(cbind, lapply(lapply(temp_holder, function(single_bin) {
+  all_samples <- get_sample_bins(length(channel_data), samp.rate, time_bin)
+  
+  channel_data <- switch(
+    channel,
+    "stereo" = list("left" = channel_data@left, "right" = channel_data@right),
+    setNames(list(slot(channel_data, channel)), channel)
+  )
+  
+  BGN_exp <- lapply(channel_data, function(x) {
     
-    spect_S <- abs(single_bin[[1]])
+    offset <- x - mean(x)
     
-    # Convert to decibels
-    spect_S <- 10 * log10(spect_S / max(spect_S))
-    
-    # Converting values lower than the decibel threshold to the threshold value
-    spect_S[spect_S < db_threshold] <- db_threshold
-    
-    apply(spect_S, 1, function(x) {
-      db_max <- max(x)
-      db_min <- min(x)
-      
-      bin_width <- 2 * IQR(x) / length(x)^(1 / 3)
-      
-      num_bins <- ifelse(is.numeric(histbreaks),
-                         histbreaks,
-                         eval(parse(text = paste0("nclass.", histbreaks, "(x)"))))
-      
-      modal_intensity <- db_min + ((which.max(tabulate(findInterval(
-        x = x,
-        vec = seq(db_min, db_max, length.out = num_bins)
-      )))) * bin_width)
-      
-      c(BGN = modal_intensity, POW = db_max - modal_intensity)
+    temp_holder <- apply(all_samples, 1, function(y) {
+      list(
+        signal::specgram(
+          x = offset[y[1]:y[2]],
+          n = wl,
+          Fs = samp.rate,
+          window = window,
+          overlap = overlap
+        )$S
+      )
     })
     
-  }), function(x)
-    data.frame(t(x)))))
+    BGN_POW_df <- data.frame(do.call(cbind, lapply(lapply(temp_holder, function(single_bin) {
+      spect_S <- abs(single_bin[[1]])
+      
+      spect_S <- 10 * log10(spect_S / max(spect_S))
+      
+      spect_S[spect_S < db_threshold] <- db_threshold
+      
+      apply(spect_S, 1, function(x) {
+        db_max <- max(x)
+        db_min <- min(x)
+        
+        bin_width <- 2 * IQR(x) / length(x)^(1 / 3)
+        
+        num_bins <- ifelse(is.numeric(histbreaks), histbreaks, eval(parse(
+          text = paste0("nclass.", histbreaks, "(x)")
+        )))
+        
+        modal_intensity <- db_min + ((which.max(tabulate(
+          findInterval(
+            x = x,
+            vec = seq(db_min, db_max, length.out = num_bins)
+          )
+        ))) * bin_width)
+        
+        c(BGN = modal_intensity, POW = db_max - modal_intensity)
+      })
+      
+    }), function(x)
+      data.frame(t(x)))))
+    
+    colnames(BGN_POW_df) <- paste0(rep(c("BGN", "POW"), frame_bin), rep(1:frame_bin, each = 2))
+    
+    # Separating BGN and POW in different data frames
+    BGN <- data.frame(BGN_POW_df[, grepl("BGN", colnames(BGN_POW_df))])
+    POW <- data.frame(BGN_POW_df[, grepl("POW", colnames(BGN_POW_df))])
+    
+    # Return them both again but no as a list
+    return(list(BGN = BGN, POW = POW))
+    
+  })
   
-  # Separating BGN and POW in different data frames
-  BGN <- setNames(data.frame(BGN_POW_df[, grepl("BGN", colnames(BGN_POW_df))]), paste0(paste0(toupper(ch), "_BGN", seq(time_bins))))
-  POW <- setNames(data.frame(BGN_POW_df[, grepl("POW", colnames(BGN_POW_df))]), paste0(paste0(toupper(ch), "_POW", seq(time_bins))))
+  BGN_exp[["time_bins"]] <- setNames(round((all_samples$e - all_samples$b) / samp.rate),
+                                 paste0("BIN", seq(frame_bin)))
   
-  # Return them both again but no as a list
-  return(list(BGN = BGN, POW = POW))
+  return(BGN_exp)
   
 }
