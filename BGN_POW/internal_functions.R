@@ -26,9 +26,9 @@ process_channel <- function(channel_data,
   
   samp.rate <- channel_data@samp.rate
   
-  frame_bin <- ceiling(length(channel_data) / samp.rate) / time_bin
-  
   all_samples <- get_sample_bins(length(channel_data), samp.rate, time_bin)
+  
+  frame_bin <- nrow(all_samples)
   
   channel_data <- switch(
     channel,
