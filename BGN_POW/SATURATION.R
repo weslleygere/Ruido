@@ -9,7 +9,7 @@ soundsat <- function(soundpath,
                      histbreaks = "FD",
                      powthr = c(5.1, 20, 0.1),
                      bgnthr = c(0.51, 0.99, 0.02),
-                     normality = "shapiro.test",
+                     normality = "ks.test",
                      n_files = NULL,
                      backup = NULL) {
   # Loading necessary packages
@@ -114,6 +114,8 @@ soundsat <- function(soundpath,
           "is not valid!\nError:",
           BGN_POW$message,
           "\n")
+      
+      return(BGN_POW)
       
     } else {
       if (channel == "stereo") {
@@ -271,8 +273,10 @@ soundsat <- function(soundpath,
   if (!is.null(backup))
     file.remove(paste0(backup, "/", basename(soundfiles), ".txt"))
   
-  DURATIONS <- as.numeric(sapply(SAT_df, function(x) x[["DUR"]]))
-  SAT_df <- do.call(rbind, lapply(SAT_df, function(x) x[["SAT"]]))
+  which.error <- sapply(SAT_df, function(x) is(x, "error") || is(x, "warning"))
+  ERRORS <- SAT_df[which.error]
+  DURATIONS <- as.numeric(sapply(SAT_df[!which.error], function(x) x[["DUR"]]))
+  SAT_df <- do.call(rbind, lapply(SAT_df[!which.error], function(x) x[["SAT"]]))
   
   colnames(SAT_df) <- combinations
   
@@ -298,7 +302,7 @@ soundsat <- function(soundpath,
   # Now we grab the threshold combination that yield the most normal results.
   # For shapiro.test, the higher the number, the higher the normality
   
-  thresholds <- unlist(strsplit(names(which.max(normal)), split = "/"))
+    thresholds <- unlist(strsplit(names(which.max(normal)), split = "/"))
   
   # Here's a nice message telling the user the values of both thresholds and the result of the most normal test
   
@@ -323,15 +327,17 @@ soundsat <- function(soundpath,
     powthresh = numeric(0),
     bgntresh = numeric(0),
     normality = numeric(0),
-    values = data.frame()
+    values = data.frame(),
+    errors = data.frame()
   )
   
   export["powthresh"] <- as.numeric(thresholds[1])
   export["bgntresh"] <- as.numeric(thresholds[2]) * 100
-  export[normality] <- as.numeric(as.numeric(max(normal)))
+  export["normality"] <- as.numeric(as.numeric(max(normal)))
   export[["values"]] <- data.frame(AUDIO = rownames(SAT_df),
                                    DURATION = DURATIONS,
                                      SAT = SAT_df[, which.max(normal)])
+  export[["errors"]] <- data.frame(file = soundfiles[which.error],do.call(rbind, ERRORS))
   
   return(export)
   
